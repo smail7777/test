@@ -4,15 +4,14 @@ import axios from "axios";
 import { Navigate } from "react-router-dom";
 import { UserContext } from "../UserContext";
 
-export default function BookingWidget({ place }) {
+export default function TransportBookingWidget({ transport }) {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
-  const [numberOfGuests, setNumberOfGuests] = useState(1); 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [redirect, setRedirect] = useState('');
-  const { user } = useContext(UserContext);
+  const [redirect, setRedirect] = useState(null); // Utilisation de null pour indiquer qu'aucune redirection n'est nécessaire
   const [bookingError, setBookingError] = useState('');
+  const { user } = useContext(UserContext);
 
   useEffect(() => {
     if (user) {
@@ -25,13 +24,13 @@ export default function BookingWidget({ place }) {
     numberOfNights = differenceInCalendarDays(new Date(checkOut), new Date(checkIn));
   }
 
-  async function bookThisPlace() {
+  async function bookThisTransport() {
     // Vérifier si tous les champs obligatoires sont remplis
-    if (!checkIn || !checkOut || !numberOfGuests || !name || !phone) {
+    if (!checkIn || !checkOut || !name || !phone) {
       setBookingError('Please fill in all required fields.');
       return;
     }
-
+  
     // Vérifier que checkOut est postérieur à checkIn
     const checkInDate = new Date(checkIn);
     const checkOutDate = new Date(checkOut);
@@ -39,66 +38,49 @@ export default function BookingWidget({ place }) {
       setBookingError('Check-out date must be after check-in date.');
       return;
     }
-
-    // Vérifier que numberOfGuests est supérieur à zéro
-    if (numberOfGuests <= 0) {
-      setBookingError('Number of guests must be greater than zero.');
-      return;
-    }
-
-    // Calculer le prix
-    const price = numberOfGuests * place.price; 
-
+  
     try {
-      const response = await axios.post('/bookings', {
+      const response = await axios.post('/bookings-transport', {
+        transport: transport._id,
         checkIn,
         checkOut,
-        numberOfGuests,
         name,
         phone,
-        place: place._id,
-        price: price,
       });
-
+  
       const bookingId = response.data._id;
-      setRedirect(`/account/bookings/${bookingId}`);
+      // Rediriger vers la page BookingTransportInfos avec l'ID de la réservation
+      setRedirect(`/bookings-transport/${bookingId}`);
     } catch (error) {
-      if (error.response && error.response.status === 409) {
-        setBookingError('The selected dates are already booked. Please choose other dates.');
-      } else {
-        setBookingError('An unexpected error occurred. Please try again later.');
-        console.error('Error making booking:', error);
-      }
-
+      setBookingError('An unexpected error occurred. Please try again later.');
+      console.error('Error making booking:', error);
+  
       setTimeout(() => {
         setBookingError('');
       }, 5000);
     }
   }
-
+  
   if (redirect) {
-    return <Navigate to={redirect} />
+    return <Navigate to={redirect} />;
   }
-
+  
   return (
     <div className="bg-white shadow p-4 rounded-2xl">
+<div className="bg-white shadow p-4 rounded-2xl">
       <div className="text-2xl text-center">
-        Price: ${place.price} / per night
+        Price: ${transport.price} / per trip
       </div>
       <div className="border rounded-2xl mt-4">
         <div className="flex">
           <div className="py-3 px-4">
-            <label>Check in:</label>
+            <label>Departure Date:</label>
             <input type="date" value={checkIn} onChange={(ev) => setCheckIn(ev.target.value)} />
           </div>
           <div className="py-3 px-4 border-l">
-            <label>Check out:</label>
+            <label>Return Date:</label>
             <input type="date" value={checkOut} onChange={(ev) => setCheckOut(ev.target.value)} />
           </div>
-        </div>
-        <div className="py-3 px-4 border-t">
-          <label>Number of guests:</label>
-          <input type="number" value={numberOfGuests} onChange={(ev) => setNumberOfGuests(ev.target.value)} />
         </div>
         {numberOfNights > 0 && (
           <div className="py-3 px-4 border-t">
@@ -109,15 +91,15 @@ export default function BookingWidget({ place }) {
           </div>
         )}
       </div>
-      <button onClick={bookThisPlace} className="primary mt-4">
-        Book this place
+      <button onClick={bookThisTransport} className="primary mt-4">
+        Book this transport
         {numberOfNights > 0 && (
-          <span> ${numberOfNights * place.price}</span>
+          <span> ${numberOfNights * transport.price}</span>
         )}
       </button>
       {bookingError && (
         <div className="text-red-500 mt-2">{bookingError}</div>
       )}
-    </div>
+    </div>    </div>
   );
 }

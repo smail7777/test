@@ -48,7 +48,7 @@ export default function ProfilePage () {
 
   return (
 
-    <div> 
+    <div className="mt-5 min-h-screen bg-gradient-to-r from-blue-50 to-purple-100"> 
      <AccountNav />
     {subpage === 'profile' && (
      <div className="text-center max-w-lg mx-auto">

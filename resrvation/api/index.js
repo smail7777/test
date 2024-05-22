@@ -6,10 +6,14 @@ const jwt = require('jsonwebtoken');
 const User = require('./models/User.js');
 const Place = require('./models/Place.js');
 const Booking = require('./models/Booking.js');
+const Transport = require('./models/Transport.js');
+const BookingTransport = require('./models/BookingTransport.js');
+
 const cookieParser = require('cookie-parser');
 const imageDownloader = require('image-downloader');
 const multer = require('multer');
 const fs = require('fs');
+const authenticateToken = require('./middlewares/authenticateToken');
 
 require('dotenv').config();
 const app = express();
@@ -76,22 +80,10 @@ app.post('/login', async (req, res) => {
     }
 });
 
-app.get('/profile', async (req, res) => {
+app.get('/profile', authenticateToken, async (req, res) => {
     try {
-        const token = req.cookies.token;
-        if (!token) {
-            return res.json(null);
-        }
-
-        jwt.verify(token, jwtSecret, {}, async (err, userData) => {
-            if (err) {
-                console.error('Error verifying token:', err);
-                return res.status(401).json({ error: 'Unauthorized' });
-            }
-
-            const { name, email, _id } = await User.findById(userData.id);
-            res.json({ name, email, _id });
-        });
+        const { name, email, _id } = await User.findById(req.user.id);
+        res.json({ name, email, _id });
     } catch (error) {
         console.error('Error in /profile route:', error);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -128,29 +120,33 @@ app.post('/upload', photosMiddleware.array('photos', 100), (req, res) => {
 }); 
 
 
-app.post('/places',  (req,res) => {
-  const {token} = req.cookies;
-  const 
-  {title,address,addedPhotos,description,
-  perks,extraInfo,checkIn,checkOut,maxGuests,price,
-} = req.body;
-  jwt.verify(token, jwtSecret, {}, async (err, userData) => {
-    if (err) throw err;
-    const placeDoc = await Place.create({
-    owner: userData.id,price,
-    title,address,photos:addedPhotos,description,
-    perks,extraInfo,checkIn,checkOut,maxGuests,
-    });
-    res.json(placeDoc);
-   });
+app.post('/places', authenticateToken, async (req, res) => {
+    const {
+        title, address, addedPhotos, description, perks, extraInfo,
+        checkIn, checkOut, maxGuests, price
+    } = req.body;
+
+    try {
+        const placeDoc = await Place.create({
+            owner: req.user.id, price, title, address, photos: addedPhotos, description,
+            perks, extraInfo, checkIn, checkOut, maxGuests,
+        });
+        res.json(placeDoc);
+    } catch (error) {
+        console.error('Error creating place:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 });
 
-app.get('/user-places', (req,res) => {
-const {token} =req.cookies;
-  jwt.verify(token, jwtSecret, {}, async (err,userData) => {
-   const {id} = userData;
-   res.json( await Place.find({owner:id}) );
-  });
+app.get('/user-places', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.user;
+        const places = await Place.find({ owner: id });
+        res.json(places);
+    } catch (error) {
+        console.error('Error fetching user places:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 });
 
 app.get('/places/:id',async (req,res) => {
@@ -181,43 +177,511 @@ app.get('/places',async (req,res) => {
 })
 
 
-app.post('/bookings', async (req, res) => {
-    const userData = await getUserDataFromReq(req);
+app.post('/bookings', authenticateToken, async (req, res) => {
+    const userData = req.user;
     const {
-        place,
-        checkIn,
-        checkOut,
-        numberOfGuests,
-        name,
-        phone,
-        price,
+        place, checkIn, checkOut, numberOfGuests, name, phone, price,
     } = req.body;
 
     if (!place || !checkIn || !checkOut || !numberOfGuests || !name || !phone || !price) {
         return res.status(400).json({ error: 'All fields are required' });
     }
 
-    Booking.create({
-        place,
-        checkIn,
-        checkOut,
-        numberOfGuests,
-        name,
-        phone,
-        price,
-        user: userData.id,
-    }).then((doc) => {
-        res.json(doc);
-    }).catch((err) => {
+    try {
+        const booking = await Booking.create({
+            place, checkIn, checkOut, numberOfGuests, name, phone, price, user: userData.id,
+        });
+        res.json(booking);
+    } catch (error) {
+        console.error('Error creating booking:', error);
         res.status(500).json({ error: 'Internal Server Error' });
-    });
+    }
+})
+
+
+app.get('/bookings', authenticateToken, async (req, res) => {
+    try {
+        const userData = req.user;
+        const bookings = await Booking.find({ user: userData.id }).populate('place');
+        res.json(bookings);
+    } catch (error) {
+        console.error('Error fetching bookings:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 });
 
 
-app.get('/bookings',async (req,res) => {
-  const userData = await getUserDataFromReq(req);
-  res.json( await Booking.find({user:userData.id}).populate('place') );
+
+// Endpoint pour supprimer une réservation
+app.delete('/bookings/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await Booking.findByIdAndDelete(id);
+        res.json({ message: 'Booking deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting booking:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 });
+
+
+
+// Endpoint pour modifier une réservation
+app.put('/bookings/:id', async (req, res) => {
+    const { id } = req.params;
+    const { checkIn, checkOut, numberOfGuests, name, phone, price } = req.body;
+    try {
+        await Booking.findByIdAndUpdate(id, {
+            checkIn,
+            checkOut,
+            numberOfGuests,
+            name,
+            phone,
+            price,
+        });
+        res.json({ message: 'Booking updated successfully' });
+    } catch (error) {
+        console.error('Error updating booking:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// Endpoint pour mettre à jour une réservation
+app.put('/bookings/:id/update', async (req, res) => {
+    const { id } = req.params;
+    const { checkIn, checkOut, numberOfGuests, name, phone, price } = req.body;
+    try {
+        await Booking.findByIdAndUpdate(id, {
+            checkIn,
+            checkOut,
+            numberOfGuests,
+            name,
+            phone,
+            price,
+        });
+        res.json({ message: 'Booking updated successfully' });
+    } catch (error) {
+        console.error('Error updating booking:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+
+
+
+app.get('/my-accommodation-bookings', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const accommodations = await Place.find({ owner: userId }).select('_id');
+        const bookings = await Booking.find({ place: { $in: accommodations } }).populate('place').populate('user');
+        res.json(bookings);
+    } catch (error) {
+        console.error('Error fetching accommodation bookings:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.put('/bookings/:id/validate', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const booking = await Booking.findById(id);
+
+        // Vérifier si le booking existe
+        if (!booking) {
+            return res.status(404).json({ error: 'Booking not found' });
+        }
+
+        // Vérifier si la réservation est déjà validée
+        if (booking.status === 'validated') {
+            return res.status(400).json({ error: 'Booking already validated' });
+        }
+
+        // Mettre à jour le statut de la réservation avec l'ID fourni
+        await Booking.findByIdAndUpdate(id, { status: 'validated' });
+
+        res.sendStatus(200);
+    } catch (error) {
+        console.error('Error validating booking:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+
+
+// Route pour supprimer une place par ID
+app.delete('/places/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const deletedPlace = await Place.findByIdAndDelete(id);
+        if (!deletedPlace) {
+            return res.status(404).json({ message: 'Place not found' });
+        }
+        res.status(200).json({ message: 'Place deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting place:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+});
+
+
+// Endpoint pour récupérer les détails d'une réservation par son ID
+app.get('/bookings/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const booking = await Booking.findById(id).populate('place').populate('user');
+        if (!booking) {
+            return res.status(404).json({ error: 'Booking not found' });
+        }
+        res.json(booking);
+    } catch (error) {
+        console.error('Error fetching booking details:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+
+
+app.post('/transports', authenticateToken, async (req, res) => {
+    try {
+        const {
+            title, address, description, addedPhotos, extraInfo, price,checkIn,checkOut,
+        } = req.body;
+        const transportDoc = await Transport.create({
+            owner: req.user.id, title, address, description, photos: addedPhotos, extraInfo, price,checkIn,checkOut,
+        });
+        res.json(transportDoc);
+    } catch (error) {
+        console.error('Error creating transport:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+app.get('/user-transports', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const userTransports = await Transport.find({ owner: userId });
+        res.json(userTransports);
+    } catch (error) {
+        console.error('Error fetching user transports:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+app.get('/all-transports', async (req, res) => {
+    try {
+        const allTransports = await Transport.find();
+        res.json(allTransports);
+    } catch (error) {
+        console.error('Error fetching all transports:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.get('/transports/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const transportDetails = await Transport.findById(id);
+        res.json(transportDetails);
+    } catch (error) {
+        console.error('Error fetching transport details:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.put('/transports/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const {
+            title, address, description, addedPhotos, extraInfo, price,checkIn,checkOut,
+        } = req.body;
+        const transportDoc = await Transport.findById(id);
+        if (req.user.id === transportDoc.owner.toString()) {
+            transportDoc.set({
+                title, address, description, photos: addedPhotos, extraInfo, price,checkIn,checkOut,
+            });
+            await transportDoc.save();
+            res.json({ message: 'Transport updated successfully', transport: transportDoc });
+        } else {
+            res.status(403).json({ error: 'Unauthorized' });
+        }
+    } catch (error) {
+        console.error('Error updating transport:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// Endpoint pour récupérer les détails d'un transport par son ID
+app.get('/transport/Book/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const transportDetails = await Transport.findById(id);
+        if (!transportDetails) {
+            return res.status(404).json({ error: 'Transport not found' });
+        }
+        res.json(transportDetails);
+    } catch (error) {
+        console.error('Error fetching transport details:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+app.delete('/transports/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const transportDoc = await Transport.findById(id);
+        if (req.user.id === transportDoc.owner.toString()) {
+            await Transport.findByIdAndDelete(id);
+            res.json({ message: 'Transport deleted successfully' });
+        } else {
+            res.status(403).json({ error: 'Unauthorized' });
+        }
+    } catch (error) {
+        console.error('Error deleting transport:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+}); 
+
+// Endpoint pour créer un transport avec calcul du prix
+app.post('/transports', authenticateToken, async (req, res) => {
+    try {
+        const { title, address, description, addedPhotos, extraInfo, checkIn, checkOut } = req.body;
+        const price = calculatePrice(checkIn, checkOut); // Fonction de calcul du prix
+        const transportDoc = await Transport.create({
+            owner: req.user.id, title, address, description, photos: addedPhotos, extraInfo, price, checkIn, checkOut,
+        });
+        res.json(transportDoc);
+    } catch (error) {
+        console.error('Error creating transport:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.post('/bookings-transport', authenticateToken, async (req, res) => {
+    const userData = req.user;
+    const { transport, checkIn, checkOut, name, phone } = req.body;
+
+    if (!transport || !checkIn || !checkOut || !name || !phone) {
+        return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    try {
+        const transportDetails = await Transport.findById(transport);
+        const price = transportDetails.price;
+
+        const booking = await BookingTransport.create({
+            transport, checkIn, checkOut, name, phone, price, user: userData.id,
+        });
+        res.json(booking);
+    } catch (error) {
+        console.error('Error creating booking:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+
+app.get('/user-transport-bookings', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const transportBookings = await BookingTransport.find({ user: userId }).populate('transport');
+        res.json(transportBookings);
+    } catch (error) {
+        console.error('Error fetching transport bookings:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+app.delete('/bookings/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await BookingTransport.findByIdAndDelete(id);
+        res.json({ message: 'Transport booking deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting transport booking:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+
+
+
+app.get('/bookings-transport/:id', authenticateToken, async (req, res) => {
+    try {
+      const bookingId = req.params.id;
+      const booking = await BookingTransport.findById(bookingId).populate('transport');
+      if (!booking) {
+        return res.status(404).json({ error: 'Booking not found' });
+      }
+      res.json(booking);
+    } catch (error) {
+      console.error('Error fetching booking details:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.get('/transport/bookings', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const transportBookings = await BookingTransport.find({ user: userId }).populate('transport');
+        res.json(transportBookings);
+    } catch (error) {
+        console.error('Error fetching transport bookings:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// Endpoint pour supprimer une réservation de transport
+app.delete('/transport/bookings/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await BookingTransport.findByIdAndDelete(id);
+        res.json({ message: 'Transport booking deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting transport booking:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.put('/transport/bookings/:id', async (req, res) => {
+    const { id } = req.params;
+    const { checkIn, checkOut, name, phone, price, status } = req.body;
+
+    try {
+        const updatedBooking = await BookingTransport.findByIdAndUpdate(
+            id,
+            { checkIn, checkOut, name, phone, price, status },
+            { new: true, runValidators: true }
+        );
+
+        if (!updatedBooking) {
+            return res.status(404).json({ message: 'Booking not found' });
+        }
+
+        res.status(200).json(updatedBooking);
+    } catch (error) {
+        res.status(500).json({ message: 'Error updating booking', error });
+    }
+});
+
+// Récupération des données du transport à éditer
+app.get('/transports/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const transportDetails = await Transport.findById(id);
+        res.json(transportDetails);
+    } catch (error) {
+        console.error('Error fetching transport details:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// Mise à jour du transport
+app.put('/transports/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const {
+            title, address, description, addedPhotos, extraInfo, price, checkIn, checkOut,
+        } = req.body;
+        const transportDoc = await Transport.findById(id);
+        if (req.user.id === transportDoc.owner.toString()) {
+            transportDoc.set({
+                title, address, description, photos: addedPhotos, extraInfo, price, checkIn, checkOut,
+            });
+            await transportDoc.save();
+            res.json({ message: 'Transport updated successfully', transport: transportDoc });
+        } else {
+            res.status(403).json({ error: 'Unauthorized' });
+        }
+    } catch (error) {
+        console.error('Error updating transport:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+app.put('/transports/:id/validate', async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Mettre à jour le statut de la réservation avec l'ID fourni
+        await BookingTransport.findByIdAndUpdate(id, { status: 'validated' });
+
+        res.sendStatus(200);
+    } catch (error) {
+        console.error('Error validating transport booking:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+app.put('/transports/:id/validate', async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Mettre à jour le statut de la réservation avec l'ID fourni
+        await BookingTransport.findByIdAndUpdate(id, { status: 'validated' });
+
+        res.sendStatus(200);
+    } catch (error) {
+        console.error('Error validating transport booking:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.put('/bookings-transport/:id/validate', async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Recherche de la réservation de transport avec l'ID spécifié
+        const booking = await BookingTransport.findById(id);
+        if (!booking) {
+            return res.status(404).json({ error: 'Transport booking not found' });
+        }
+
+        // Vérifier si la réservation de transport est déjà validée
+        if (booking.status === 'validated') {
+            return res.status(400).json({ error: 'Transport booking already validated' });
+        }
+
+        // Mettre à jour le statut de la réservation de transport avec l'ID fourni
+        await BookingTransport.findByIdAndUpdate(id, { status: 'validated' });
+
+        res.sendStatus(200);
+    } catch (error) {
+        console.error('Error validating transport booking:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+app.put('/transports/:id/update', async (req, res) => {
+    const { id } = req.params;
+    const { checkIn, checkOut, name, phone, price } = req.body;
+    try {
+        await BookingTransport.findByIdAndUpdate(id, {
+            checkIn,
+            checkOut,
+            name,
+            phone,
+            price,
+        });
+        res.json({ message: 'Booking updated successfully' });
+    } catch (error) {
+        console.error('Error updating transport booking:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+
+
+
+
 
 app.listen(4000, () => {
     console.log('Server running on port 4000');

@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const placeSchema = new mongoose.Schema({
+const TransportSchema = new mongoose.Schema({
     owner: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -22,13 +22,17 @@ const placeSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    perks: {
-        type: [String],
-        default: []
+    price: {
+        type: Number,
+        required: true
     },
     extraInfo: {
         type: String,
         default: ''
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
     },
     checkIn: {
         type: Number,
@@ -37,21 +41,9 @@ const placeSchema = new mongoose.Schema({
     checkOut: {
         type: Number,
         required: true
-    },
-    maxGuests: {
-        type: Number,
-        required: true
-    },
-    price: {
-        type: Number,
-        required: true
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
     }
 });
 
-const PlaceModel = mongoose.model('Place', placeSchema);
+const TransportModel = mongoose.model('Transport', TransportSchema);
 
-module.exports = PlaceModel;
+module.exports = TransportModel;
