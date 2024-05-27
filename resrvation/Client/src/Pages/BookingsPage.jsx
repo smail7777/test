@@ -35,6 +35,27 @@ const BookingsPage = () => {
         }
     };
 
+        // Fonction pour calculer le nombre de nuits entre deux dates
+        const calculateNumberOfNights = (checkIn, checkOut) => {
+            const oneDay = 24 * 60 * 60 * 1000; // Nombre total de millisecondes dans un jour
+            const startDate = new Date(checkIn);
+            const endDate = new Date(checkOut);
+            const numberOfNights = Math.round(Math.abs((startDate - endDate) / oneDay));
+            return numberOfNights;
+        };
+    
+        // Fonction pour calculer le prix total en fonction du nombre de nuits
+        const calculateTotalPrice = (booking) => {
+            const numberOfNights = calculateNumberOfNights(booking.checkIn, booking.checkOut);
+            if (booking.place) {
+                return numberOfNights * booking.place.price;
+            } else if (booking.transport) {
+                return numberOfNights * booking.transport.price;
+            } else {
+                return 0; // Mettez ici la logique si aucun prix n'est trouvé
+            }
+        };
+
     return (
         <div className="mt-5 min-h-screen bg-gradient-to-r from-blue-50 to-purple-100">
             <AccountNav />
@@ -58,14 +79,16 @@ const BookingsPage = () => {
                                 </div>
                             </div>
                             <div className="py-3 pr-3 flex flex-col justify-between flex-grow">
-                                <div>
-                                    <h2 className="text-2xl font-semibold text-gray-800">{booking.place ? booking.place.title : 'No Title Available'}</h2>
+                            <div>
+                                    <h2 className="text-2xl font-semibold text-gray-800">
+                                        {booking.place ? booking.place.title : booking.transport ? booking.transport.title : 'No Title Available'}
+                                    </h2>
                                     <BookingDates booking={booking} className="mb-2 mt-4 text-gray-500" />
                                     <div className="text-xl text-gray-700 flex items-center">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 inline-block mr-2">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
                                         </svg>
-                                        Total price: ${booking.price}
+                                        Total price: ${calculateTotalPrice(booking)}
                                     </div>
                                 </div>
                                 <div className="flex gap-4 mt-4">

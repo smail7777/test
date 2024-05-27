@@ -198,11 +198,10 @@ app.post('/bookings', authenticateToken, async (req, res) => {
     }
 })
 
-
 app.get('/bookings', authenticateToken, async (req, res) => {
     try {
-        const userData = req.user;
-        const bookings = await Booking.find({ user: userData.id }).populate('place');
+        const userId = req.user.id;
+        const bookings = await Booking.find({ user: userId }).populate('place');
         res.json(bookings);
     } catch (error) {
         console.error('Error fetching bookings:', error);
@@ -212,12 +211,16 @@ app.get('/bookings', authenticateToken, async (req, res) => {
 
 
 
-// Endpoint pour supprimer une réservation
-app.delete('/bookings/:id', async (req, res) => {
-    const { id } = req.params;
+
+// Endpoint pour supprimer une réservation de place
+app.delete('/bookings/:id', authenticateToken, async (req, res) => {
+    const bookingId = req.params.id;
+
     try {
-        await Booking.findByIdAndDelete(id);
-        res.json({ message: 'Booking deleted successfully' });
+        // Supprimer la réservation de la base de données
+        await Booking.findByIdAndDelete(bookingId);
+
+        res.status(200).json({ message: 'Booking deleted successfully' });
     } catch (error) {
         console.error('Error deleting booking:', error);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -268,19 +271,6 @@ app.put('/bookings/:id/update', async (req, res) => {
 
 
 
-
-
-app.get('/my-accommodation-bookings', authenticateToken, async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const accommodations = await Place.find({ owner: userId }).select('_id');
-        const bookings = await Booking.find({ place: { $in: accommodations } }).populate('place').populate('user');
-        res.json(bookings);
-    } catch (error) {
-        console.error('Error fetching accommodation bookings:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
 
 app.put('/bookings/:id/validate', async (req, res) => {
     try {
@@ -462,6 +452,7 @@ app.post('/transports', authenticateToken, async (req, res) => {
     }
 });
 
+
 app.post('/bookings-transport', authenticateToken, async (req, res) => {
     const userData = req.user;
     const { transport, checkIn, checkOut, name, phone } = req.body;
@@ -498,6 +489,7 @@ app.get('/user-transport-bookings', authenticateToken, async (req, res) => {
 });
 
 
+
 app.delete('/bookings/:id', async (req, res) => {
     const { id } = req.params;
     try {
@@ -527,23 +519,16 @@ app.get('/bookings-transport/:id', authenticateToken, async (req, res) => {
     }
   });
 
-  app.get('/transport/bookings', authenticateToken, async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const transportBookings = await BookingTransport.find({ user: userId }).populate('transport');
-        res.json(transportBookings);
-    } catch (error) {
-        console.error('Error fetching transport bookings:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
 
 // Endpoint pour supprimer une réservation de transport
-app.delete('/transport/bookings/:id', async (req, res) => {
-    const { id } = req.params;
+app.delete('/transport/bookings/:id', authenticateToken, async (req, res) => {
+    const bookingId = req.params.id;
+
     try {
-        await BookingTransport.findByIdAndDelete(id);
-        res.json({ message: 'Transport booking deleted successfully' });
+        // Supprimer la réservation de la base de données
+        await BookingTransport.findByIdAndDelete(bookingId);
+
+        res.status(200).json({ message: 'Transport booking deleted successfully' });
     } catch (error) {
         console.error('Error deleting transport booking:', error);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -607,18 +592,6 @@ app.put('/transports/:id', authenticateToken, async (req, res) => {
 });
 
 
-app.put('/transports/:id/validate', async (req, res) => {
-    try {
-        const { id } = req.params;
-        // Mettre à jour le statut de la réservation avec l'ID fourni
-        await BookingTransport.findByIdAndUpdate(id, { status: 'validated' });
-
-        res.sendStatus(200);
-    } catch (error) {
-        console.error('Error validating transport booking:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
 
 
 app.put('/transports/:id/validate', async (req, res) => {
@@ -677,6 +650,80 @@ app.put('/transports/:id/update', async (req, res) => {
     }
 });
 
+
+app.get('/transport/bookings', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const transportBookings = await BookingTransport.find({ user: userId }).populate('transport');
+        res.json(transportBookings);
+    } catch (error) {
+        console.error('Error fetching transport bookings:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+app.get('/my-accommodation-bookings', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const accommodations = await Place.find({ owner: userId }).select('_id');
+        const bookings = await Booking.find({ place: { $in: accommodations } }).populate('place').populate('user');
+        res.json(bookings);
+    } catch (error) {
+        console.error('Error fetching accommodation bookings:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+app.get('/owner/bookings', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // Fetch accommodations and transport owned by the user
+        const accommodations = await Place.find({ owner: userId }).select('_id');
+        const transports = await Transport.find({ owner: userId }).select('_id');
+
+        // Fetch bookings related to the accommodations and transports
+        const accommodationBookings = await Booking.find({ place: { $in: accommodations } }).populate('place').populate('user');
+        const transportBookings = await BookingTransport.find({ transport: { $in: transports } }).populate('transport').populate('user');
+
+        // Combine both bookings
+        const allBookings = accommodationBookings.concat(transportBookings);
+
+        res.json(allBookings);
+    } catch (error) {
+        console.error('Error fetching owner bookings:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+app.post('/owner/bookings/:id/validate', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const bookingId = req.params.id;
+
+        // Find the booking and validate ownership
+        const booking = await Booking.findById(bookingId).populate('place');
+        const transportBooking = await BookingTransport.findById(bookingId).populate('transport');
+
+        if (booking && booking.place.owner.toString() === userId) {
+            booking.status = 'validated';
+            await booking.save();
+            res.json({ message: 'Booking validated successfully' });
+        } else if (transportBooking && transportBooking.transport.owner.toString() === userId) {
+            transportBooking.status = 'validated';
+            await transportBooking.save();
+            res.json({ message: 'Transport booking validated successfully' });
+        } else {
+            res.status(403).json({ error: 'Unauthorized action' });
+        }
+    } catch (error) {
+        console.error('Error validating booking:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
 
 
 

@@ -24,6 +24,7 @@ import TransportBookingPage from './Pages/TransportBookingPage.jsx';
 import TransportBookingDates from './TransportBookingDates.jsx';
 import BookingTransport from './Pages/BookingTransport.jsx';
 import EditTransport from './Pages/EditTransport.jsx';
+import BookingTransportDetailsPage from './Pages/BookingTransportDetails.jsx';
 
 axios.defaults.baseURL = 'http://localhost:4000';
 axios.defaults.withCredentials = true;
@@ -56,6 +57,8 @@ function App() {
           <Route path="/account/transport-bookings" element={<TransportBookingDates />} />
           <Route path="/account/Book" element={<BookingTransport />} />
           <Route path="/account/bookings-transport/:bookingId/edit" element={<EditTransport />} />
+          <Route path="/account/bookings/:id/details-transport" element={<BookingTransportDetailsPage />} />
+
         </Route>
       </Routes>
     </UserContextProvider>
